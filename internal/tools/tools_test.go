@@ -49,14 +49,14 @@ func getText(resp *pluginv1.ToolResponse) string {
 // ---------- notify_send ----------
 
 func TestNotifySend_MissingTitle(t *testing.T) {
-	resp := callTool(t, NotifySend(), map[string]any{"body": "hello"})
+	resp := callTool(t, NotifySend(nil), map[string]any{"body": "hello"})
 	if !isError(resp) {
 		t.Error("expected validation_error for missing title")
 	}
 }
 
 func TestNotifySend_MissingBody(t *testing.T) {
-	resp := callTool(t, NotifySend(), map[string]any{"title": "Test"})
+	resp := callTool(t, NotifySend(nil), map[string]any{"title": "Test"})
 	if !isError(resp) {
 		t.Error("expected validation_error for missing body")
 	}
@@ -65,7 +65,7 @@ func TestNotifySend_MissingBody(t *testing.T) {
 func TestNotifySend_ValidArgs(t *testing.T) {
 	// notify.Send may fail without a notification daemon — that's OK.
 	// We just verify no Go-level panic and the response is well-formed.
-	resp := callTool(t, NotifySend(), map[string]any{"title": "Test", "body": "Hello"})
+	resp := callTool(t, NotifySend(nil), map[string]any{"title": "Test", "body": "Hello"})
 	_ = resp
 }
 
@@ -163,9 +163,20 @@ func TestNotifyConfig_GetAction(t *testing.T) {
 	if isError(resp) {
 		t.Errorf("unexpected error: %s", getText(resp))
 	}
-	txt := getText(resp)
-	if !strings.Contains(txt, "enabled") {
-		t.Errorf("expected config fields in response, got: %s", txt)
+	// JSONResult puts fields directly in Result struct.
+	r := resp.GetResult()
+	if r == nil {
+		t.Fatal("expected non-nil result")
+	}
+	fields := r.GetFields()
+	if _, ok := fields["enabled"]; !ok {
+		t.Errorf("expected 'enabled' field in result, got fields: %v", fields)
+	}
+	if _, ok := fields["ai_push_enabled"]; !ok {
+		t.Errorf("expected 'ai_push_enabled' field in result")
+	}
+	if _, ok := fields["ai_voice_enabled"]; !ok {
+		t.Errorf("expected 'ai_voice_enabled' field in result")
 	}
 }
 
@@ -188,6 +199,39 @@ func TestNotifyConfig_SetNoFields(t *testing.T) {
 	resp := callTool(t, NotifyConfig(), map[string]any{"action": "set"})
 	if !isError(resp) {
 		t.Error("expected validation_error when set has no fields")
+	}
+}
+
+func TestNotifyConfig_SetAiToggles(t *testing.T) {
+	// Set AI push to false.
+	resp := callTool(t, NotifyConfig(), map[string]any{
+		"action":           "set",
+		"ai_push_enabled":  false,
+		"ai_voice_enabled": true,
+	})
+	if isError(resp) {
+		t.Errorf("unexpected error: %s", getText(resp))
+	}
+	txt := getText(resp)
+	if !strings.Contains(txt, "ai_push_enabled=false") {
+		t.Errorf("expected ai_push_enabled=false in response, got: %s", txt)
+	}
+
+	// Verify get reflects the change.
+	resp2 := callTool(t, NotifyConfig(), map[string]any{"action": "get"})
+	if isError(resp2) {
+		t.Fatalf("get error: %s", getText(resp2))
+	}
+	r := resp2.GetResult()
+	if r == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if v, ok := r.GetFields()["ai_push_enabled"]; ok {
+		if v.GetBoolValue() != false {
+			t.Error("expected ai_push_enabled=false after set")
+		}
+	} else {
+		t.Error("missing ai_push_enabled in get response")
 	}
 }
 

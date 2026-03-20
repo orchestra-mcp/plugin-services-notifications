@@ -6,13 +6,15 @@ import (
 )
 
 // NotificationsPlugin registers all notification tools with the plugin builder.
-type NotificationsPlugin struct{}
+type NotificationsPlugin struct {
+	Sender tools.Sender
+}
 
 // RegisterTools registers all 8 notification tools with the plugin builder.
 func (np *NotificationsPlugin) RegisterTools(builder *plugin.PluginBuilder) {
 	builder.RegisterTool("notify_send",
-		"Send a desktop notification with a title and body",
-		tools.NotifySendSchema(), tools.NotifySend())
+		"Send a desktop notification with a title and body. Also pushes to connected apps via socket if enabled.",
+		tools.NotifySendSchema(), tools.NotifySend(np.Sender))
 
 	builder.RegisterTool("notify_schedule",
 		"Schedule a notification to be sent at a specific time",
@@ -31,7 +33,7 @@ func (np *NotificationsPlugin) RegisterTools(builder *plugin.PluginBuilder) {
 		tools.NotifyBadgeSchema(), tools.NotifyBadge())
 
 	builder.RegisterTool("notify_config",
-		"Get or set notification configuration (quiet hours, default channel, enabled)",
+		"Get or set notification configuration (quiet hours, channels, voice, socket push, per-event toggles)",
 		tools.NotifyConfigSchema(), tools.NotifyConfig())
 
 	builder.RegisterTool("notify_history",
